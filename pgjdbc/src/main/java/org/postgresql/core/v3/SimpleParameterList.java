@@ -154,90 +154,143 @@ class SimpleParameterList implements V3ParameterList {
     bind(index, NULL_OBJECT, oid, binaryTransfer);
   }
 
+  /**
+   * <p>Escapes a given text value as a literal, wraps it in single quotes, casts it to the
+   * to the given data type, and finally wraps the whole thing in parentheses.</p>
+   *
+   * <p>For example, "123" and "int4" becomes "('123'::int)"</p>
+   *
+   * <p>The additional parentheses is added to ensure that the surrounding text of where the
+   * parameter value is entered does modify the interpretation of the value.</p>
+   *
+   * <p>For example if our input SQL is: <code>SELECT ?b</code></p>
+   *
+   * <p>Using a parameter value of '{}' and type of json we'd get:</p>
+   *
+   * <pre>
+   * test=# SELECT ('{}'::json)b;
+   *  b
+   * ----
+   *  {}
+   * </pre>
+   *
+   * <p>But without the parentheses the result changes:</p>
+   *
+   * <pre>
+   * test=# SELECT '{}'::jsonb;
+   * jsonb
+   * -------
+   * {}
+   * </pre>
+   **/
+  private static String quoteAndCast(String text, String type, boolean standardConformingStrings) {
+    StringBuilder sb = new StringBuilder((text.length() + 10) / 10 * 11); // Add 10% for escaping.
+    sb.append("('");
+    try {
+      Utils.escapeLiteral(sb, text, standardConformingStrings);
+    } catch (SQLException e) {
+      // This should only happen if we have an embedded null
+      // and there's not much we can do if we do hit one.
+      //
+      // To force a server side failure, we deliberately include
+      // a zero byte character in the literal to force the server
+      // to reject the command.
+      sb.append('\u0000');
+    }
+    sb.append("'");
+    if (type != null) {
+      sb.append("::");
+      sb.append(type);
+    }
+    sb.append(")");
+    return sb.toString();
+  }
+
   public String toString(int index, boolean standardConformingStrings) {
     --index;
     if (paramValues[index] == null) {
       return "?";
     } else if (paramValues[index] == NULL_OBJECT) {
-      return "NULL";
-    } else if ((flags[index] & BINARY) == BINARY) {
+      return "(NULL)";
+    }
+    String textValue;
+    String type;
+    if ((flags[index] & BINARY) == BINARY) {
       // handle some of the numeric types
-
       switch (paramTypes[index]) {
         case Oid.INT2:
           short s = ByteConverter.int2((byte[]) paramValues[index], 0);
-          return Short.toString(s);
+          textValue = Short.toString(s);
+          type = "int2";
+          break;
 
         case Oid.INT4:
           int i = ByteConverter.int4((byte[]) paramValues[index], 0);
-          return Integer.toString(i);
+          textValue = Integer.toString(i);
+          type = "int4";
+          break;
 
         case Oid.INT8:
           long l = ByteConverter.int8((byte[]) paramValues[index], 0);
-          return Long.toString(l);
+          textValue = Long.toString(l);
+          type = "int8";
+          break;
 
         case Oid.FLOAT4:
           float f = ByteConverter.float4((byte[]) paramValues[index], 0);
-          return Float.toString(f);
+          textValue = Float.toString(f);
+          type = "real";
+          break;
 
         case Oid.FLOAT8:
           double d = ByteConverter.float8((byte[]) paramValues[index], 0);
-          return Double.toString(d);
+          textValue = Double.toString(d);
+          type = "double precision";
+          break;
 
         case Oid.UUID:
-          String uuid =
+          textValue =
               new UUIDArrayAssistant().buildElement((byte[]) paramValues[index], 0, 16).toString();
-          return "'" + uuid + "'::uuid";
+          type = "uuid";
+          break;
 
         case Oid.POINT:
           PGpoint pgPoint = new PGpoint();
           pgPoint.setByteValue((byte[]) paramValues[index], 0);
-          return "'" + pgPoint.toString() + "'::point";
+          textValue = pgPoint.toString();
+          type = "point";
+          break;
 
         case Oid.BOX:
           PGbox pgBox = new PGbox();
           pgBox.setByteValue((byte[]) paramValues[index], 0);
-          return "'" + pgBox.toString() + "'::box";
+          textValue = pgBox.toString();
+          type = "box";
+          break;
+
+        default:
+          return "?";
       }
-      return "?";
     } else {
-      String param = paramValues[index].toString();
-
-      // add room for quotes + potential escaping.
-      StringBuilder p = new StringBuilder(3 + param.length() * 11 / 10);
-
-      // No E'..' here since escapeLiteral escapes all things and it does not use \123 kind of
-      // escape codes
-      p.append('\'');
-      try {
-        p = Utils.escapeLiteral(p, param, standardConformingStrings);
-      } catch (SQLException sqle) {
-        // This should only happen if we have an embedded null
-        // and there's not much we can do if we do hit one.
-        //
-        // The goal of toString isn't to be sent to the server,
-        // so we aren't 100% accurate (see StreamWrapper), put
-        // the unescaped version of the data.
-        //
-        p.append(param);
-      }
-      p.append('\'');
+      textValue = paramValues[index].toString();
       int paramType = paramTypes[index];
       if (paramType == Oid.TIMESTAMP) {
-        p.append("::timestamp");
+        type = "timestamp";
       } else if (paramType == Oid.TIMESTAMPTZ) {
-        p.append("::timestamp with time zone");
+        type = "timestamp with time zone";
       } else if (paramType == Oid.TIME) {
-        p.append("::time");
+        type = "time";
       } else if (paramType == Oid.TIMETZ) {
-        p.append("::time with time zone");
+        type = "time with time zone";
       } else if (paramType == Oid.DATE) {
-        p.append("::date");
+        type = "date";
       } else if (paramType == Oid.INTERVAL) {
-        p.append("::interval");
+        type = "interval";
+      } else {
+        type = null;
       }
-      return p.toString();
     }
+    return quoteAndCast(textValue, type, standardConformingStrings);
   }
 
   public void checkAllParametersSet() throws SQLException {
