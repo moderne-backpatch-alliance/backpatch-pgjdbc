@@ -1,6 +1,6 @@
 schema: osera-patch-evidence/0.1.0
 producer: moderne
-release: 9.4.1212.1-backpatch-00001
+release: 9.4.1212.1-backpatch-00002
 baseline: v9.4.1212+backpatch.baseline
 fixes:
   - cve: CVE-2024-1597
@@ -10,12 +10,20 @@ fixes:
     basis: adapted
     artifacts:
       - org.postgresql:postgresql
-    note: New in this release; ported onto 9.4.1212; fixed at 9.4.1212.1-backpatch-00001 (backpatch-pgjdbc@f8a832e..6e38815).
+    note: Carried from 9.4.1212.1-backpatch-00001; ported onto 9.4.1212; fixed at 9.4.1212.1-backpatch-00001 (backpatch-pgjdbc@f8a832e..6e38815).
+  - cve: CVE-2020-13692
+    upstream_fix_url: https://github.com/pgjdbc/pgjdbc/commit/14b62aca4764d496813f55a43d050b017e01eb65
+    advisory_url: https://nvd.nist.gov/vuln/detail/CVE-2020-13692
+    patch_commit_url: https://github.com/moderne-backpatch-alliance/backpatch-pgjdbc/compare/471598e~1...61524c0
+    basis: adapted
+    artifacts:
+      - org.postgresql:postgresql
+    note: New in this release; ported onto 9.4.1212; fixed at 9.4.1212.1-backpatch-00002 (backpatch-pgjdbc@471598e..61524c0).
 tests:
-  commit: 6e3881565edd6d81187c87a3309a77b19bbdb6b1
-  command: mvn -B -T1 -Dport=55432 -Dtest=*TestSuite,ParameterInjectionTest -Dmaven.test.failure.ignore=true clean test
+  commit: 61524c0852db3efa8c23bccf1f539c515c0e4711
+  command: mvn -B -T1 -Dport=55432 -Dtest=*TestSuite,ParameterInjectionTest,PgSQLXMLTest -Dmaven.test.failure.ignore=true clean test
   runtime: openjdk version 1.8.0_382, Apache Maven 3.9.16
-  report: postgresql-9.4.1212.1-backpatch-00001-tests.zip
-  report_sha256: f8278db3b60a87253b6e8277df964c78dae1c28c780e00fd565bc64a663b1c76
+  report: postgresql-9.4.1212.1-backpatch-00002-tests.zip
+  report_sha256: 555136d5fc12e51088a9463053769b9597451a612fd9c064a2b025dbb4e07ede
   result: pass
-  note: 3573 tests at the patch commit, 1 of them skipped by the suite, 0 failed, 0 errors. The suite ran against PostgreSQL 9.6 (the official postgres:9.6 image in Docker, port 55432, trust authentication, users test and postgres, hstore, max_prepared_transactions=10 for XATestSuite); -Dtest names the build's own suites (*TestSuite) plus ParameterInjectionTest, which no suite registers and which opens its connection in simple query mode (preferQueryMode=simple).
+  note: 3579 tests at the patch commit, 1 of them skipped by the suite, 0 failed, 0 errors. The suite ran against PostgreSQL 9.6 (the official postgres:9.6 image in Docker, port 55432, trust authentication, users test and postgres, hstore, max_prepared_transactions=10 for XATestSuite); -Dtest names the build's own suites (*TestSuite) plus ParameterInjectionTest, which no suite registers and which opens its connection in simple query mode (preferQueryMode=simple), and PgSQLXMLTest (CVE-2020-13692), which no suite registers either.
