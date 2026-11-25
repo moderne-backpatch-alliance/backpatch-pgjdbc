@@ -35,6 +35,9 @@ import org.postgresql.util.PGBinaryObject;
 import org.postgresql.util.PGobject;
 import org.postgresql.util.PSQLException;
 import org.postgresql.util.PSQLState;
+import org.postgresql.xml.DefaultPGXmlFactoryFactory;
+import org.postgresql.xml.LegacyInsecurePGXmlFactoryFactory;
+import org.postgresql.xml.PGXmlFactoryFactory;
 
 import java.io.IOException;
 import java.sql.Array;
@@ -138,6 +141,9 @@ public class PgConnection implements BaseConnection {
   private PreparedStatement checkConnectionQuery;
 
   private final LruCache<FieldMetadata.Key, FieldMetadata> fieldMetadataCache;
+
+  private final String xmlFactoryFactoryClass;
+  private PGXmlFactoryFactory xmlFactoryFactory;
 
   final CachedQuery borrowQuery(String sql) throws SQLException {
     return queryExecutor.borrowQuery(sql);
@@ -368,6 +374,8 @@ public class PgConnection implements BaseConnection {
             Math.max(0, PGProperty.DATABASE_METADATA_CACHE_FIELDS.getInt(info)),
             Math.max(0, PGProperty.DATABASE_METADATA_CACHE_FIELDS_MIB.getInt(info) * 1024 * 1024),
         false);
+
+    xmlFactoryFactoryClass = PGProperty.XML_FACTORY_FACTORY.get(info);
   }
 
   private Set<Integer> getOidSet(String oidList) throws PSQLException {
@@ -1665,5 +1673,38 @@ public class PgConnection implements BaseConnection {
       // If composite query is given, just ignore "generated keys" arguments
     }
     return ps;
+  }
+
+  @Override
+  public PGXmlFactoryFactory getXmlFactoryFactory() throws SQLException {
+    if (xmlFactoryFactory == null) {
+      if (xmlFactoryFactoryClass == null || xmlFactoryFactoryClass.equals("")) {
+        xmlFactoryFactory = DefaultPGXmlFactoryFactory.INSTANCE;
+      } else if (xmlFactoryFactoryClass.equals("LEGACY_INSECURE")) {
+        xmlFactoryFactory = LegacyInsecurePGXmlFactoryFactory.INSTANCE;
+      } else {
+        Class<?> clazz;
+        try {
+          clazz = Class.forName(xmlFactoryFactoryClass);
+        } catch (ClassNotFoundException ex) {
+          throw new PSQLException(
+              GT.tr("Could not instantiate xmlFactoryFactory: {0}", xmlFactoryFactoryClass),
+              PSQLState.INVALID_PARAMETER_VALUE, ex);
+        }
+        if (!clazz.isAssignableFrom(PGXmlFactoryFactory.class)) {
+          throw new PSQLException(
+              GT.tr("Connection property xmlFactoryFactory must implement PGXmlFactoryFactory: {0}", xmlFactoryFactoryClass),
+              PSQLState.INVALID_PARAMETER_VALUE);
+        }
+        try {
+          xmlFactoryFactory = (PGXmlFactoryFactory) clazz.newInstance();
+        } catch (Exception ex) {
+          throw new PSQLException(
+              GT.tr("Could not instantiate xmlFactoryFactory: {0}", xmlFactoryFactoryClass),
+              PSQLState.INVALID_PARAMETER_VALUE, ex);
+        }
+      }
+    }
+    return xmlFactoryFactory;
   }
 }

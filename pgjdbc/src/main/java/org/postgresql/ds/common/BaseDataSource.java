@@ -1274,4 +1274,12 @@ public abstract class BaseDataSource implements Referenceable {
   public void setReWriteBatchedInserts(boolean reWrite) {
     PGProperty.REWRITE_BATCHED_INSERTS.set(properties, reWrite);
   }
+
+  public String getXmlFactoryFactory() {
+    return PGProperty.XML_FACTORY_FACTORY.get(properties);
+  }
+
+  public void setXmlFactoryFactory(String xmlFactoryFactory) {
+    PGProperty.XML_FACTORY_FACTORY.set(properties, xmlFactoryFactory);
+  }
 }

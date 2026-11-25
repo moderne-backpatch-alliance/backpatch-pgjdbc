@@ -9,10 +9,11 @@ import org.postgresql.core.BaseConnection;
 import org.postgresql.util.GT;
 import org.postgresql.util.PSQLException;
 import org.postgresql.util.PSQLState;
+import org.postgresql.xml.DefaultPGXmlFactoryFactory;
+import org.postgresql.xml.PGXmlFactoryFactory;
 
-import org.xml.sax.ErrorHandler;
 import org.xml.sax.InputSource;
-import org.xml.sax.SAXParseException;
+import org.xml.sax.XMLReader;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -27,7 +28,6 @@ import java.sql.SQLException;
 import java.sql.SQLXML;
 
 import javax.xml.parsers.DocumentBuilder;
-import javax.xml.parsers.DocumentBuilderFactory;
 import javax.xml.stream.XMLInputFactory;
 import javax.xml.stream.XMLOutputFactory;
 import javax.xml.stream.XMLStreamException;
@@ -75,6 +75,13 @@ public class PgSQLXML implements SQLXML {
     _initialized = initialized;
     _active = false;
     _freed = false;
+  }
+
+  private PGXmlFactoryFactory getXmlFactoryFactory() throws SQLException {
+    if (_conn != null) {
+      return _conn.getXmlFactoryFactory();
+    }
+    return DefaultPGXmlFactoryFactory.INSTANCE;
   }
 
   public synchronized void free() {
@@ -128,18 +135,17 @@ public class PgSQLXML implements SQLXML {
 
     try {
       if (sourceClass == null || DOMSource.class.equals(sourceClass)) {
-        DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
-        DocumentBuilder builder = factory.newDocumentBuilder();
-        builder.setErrorHandler(new NonPrintingErrorHandler());
+        DocumentBuilder builder = getXmlFactoryFactory().newDocumentBuilder();
         InputSource input = new InputSource(new StringReader(_data));
         return (T) new DOMSource(builder.parse(input));
       } else if (SAXSource.class.equals(sourceClass)) {
+        XMLReader reader = getXmlFactoryFactory().createXMLReader();
         InputSource is = new InputSource(new StringReader(_data));
-        return (T) new SAXSource(is);
+        return (T) new SAXSource(reader, is);
       } else if (StreamSource.class.equals(sourceClass)) {
         return (T) new StreamSource(new StringReader(_data));
       } else if (StAXSource.class.equals(sourceClass)) {
-        XMLInputFactory xif = XMLInputFactory.newInstance();
+        XMLInputFactory xif = getXmlFactoryFactory().newXMLInputFactory();
         XMLStreamReader xsr = xif.createXMLStreamReader(new StringReader(_data));
         return (T) new StAXSource(xsr);
       }
@@ -182,8 +188,7 @@ public class PgSQLXML implements SQLXML {
       return (T) _domResult;
     } else if (SAXResult.class.equals(resultClass)) {
       try {
-        SAXTransformerFactory transformerFactory =
-            (SAXTransformerFactory) SAXTransformerFactory.newInstance();
+        SAXTransformerFactory transformerFactory = getXmlFactoryFactory().newSAXTransformerFactory();
         TransformerHandler transformerHandler = transformerFactory.newTransformerHandler();
         _stringWriter = new StringWriter();
         transformerHandler.setResult(new StreamResult(_stringWriter));
@@ -200,7 +205,7 @@ public class PgSQLXML implements SQLXML {
     } else if (StAXResult.class.equals(resultClass)) {
       _stringWriter = new StringWriter();
       try {
-        XMLOutputFactory xof = XMLOutputFactory.newInstance();
+        XMLOutputFactory xof = getXmlFactoryFactory().newXMLOutputFactory();
         XMLStreamWriter xsw = xof.createXMLStreamWriter(_stringWriter);
         _active = true;
         return (T) new StAXResult(xsw);
@@ -262,7 +267,7 @@ public class PgSQLXML implements SQLXML {
       // and use the identify transform to get it into a
       // friendlier result format.
       try {
-        TransformerFactory factory = TransformerFactory.newInstance();
+        TransformerFactory factory = getXmlFactoryFactory().newTransformerFactory();
         Transformer transformer = factory.newTransformer();
         DOMSource domSource = new DOMSource(_domResult.getNode());
         StringWriter stringWriter = new StringWriter();
@@ -289,19 +294,5 @@ public class PgSQLXML implements SQLXML {
     }
     _initialized = true;
   }
-
-  // Don't clutter System.err with errors the user can't silence.
-  // If something bad really happens an exception will be thrown.
-  static class NonPrintingErrorHandler implements ErrorHandler {
-    public void error(SAXParseException e) {
-    }
-
-    public void fatalError(SAXParseException e) {
-    }
-
-    public void warning(SAXParseException e) {
-    }
-  }
-
 }
 

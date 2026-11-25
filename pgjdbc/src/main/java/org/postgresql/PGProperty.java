@@ -383,7 +383,20 @@ public enum PGProperty {
    * Configure optimization to enable batch insert re-writing.
    */
   REWRITE_BATCHED_INSERTS ("reWriteBatchedInserts", "false",
-      "Enable optimization to rewrite and collapse compatible INSERT statements that are batched.");
+      "Enable optimization to rewrite and collapse compatible INSERT statements that are batched."),
+
+  /**
+   * Factory class to instantiate factories for XML processing.
+   * The default factory disables external entity processing.
+   * Legacy behavior with external entity processing can be enabled by specifying a value of LEGACY_INSECURE.
+   * Or specify a custom class that implements {@code org.postgresql.xml.PGXmlFactoryFactory}.
+   */
+  XML_FACTORY_FACTORY(
+    "xmlFactoryFactory",
+    "",
+    "Factory class to instantiate factories for XML processing"),
+
+  ;
 
   private String _name;
   private String _defaultValue;
